@@ -1,0 +1,180 @@
+%option lang = "C++"
+
+%decls %{
+	
+	#include <vector>
+	#include <string>
+	#include <unordered_set>
+	
+	enum class RelationalOperator
+	{
+	 	LESS_EQUAL,
+	 	LESS,
+	 	GREATER,
+	 	GREATER_EQUAL,
+		EQUAL,
+		NOT_EQUAL
+	};
+	std::string RelationalToString(RelationalOperator op);
+
+	
+	class AstNode;
+	using NodeVector = std::vector<AstNode*>;
+	using StdString = std::string;
+	using USet = std::unordered_set<std::string>;
+%}
+
+%{
+	#include "spl.hpp"
+
+	std::string RelationalToString(RelationalOperator op)
+	{
+		switch(op)
+		{
+			case RelationalOperator::LESS_EQUAL: return "<=";
+		 	case RelationalOperator::LESS: return "<";
+		 	case RelationalOperator::GREATER: return ">";
+		 	case RelationalOperator::GREATER_EQUAL: return ">=";
+			case RelationalOperator::EQUAL: return "==";
+			case RelationalOperator::NOT_EQUAL: return "!=";
+			default: return "UNKNOWN";
+		}
+	
+	}
+
+
+%}
+
+%node AstNode %abstract %typedef
+
+%node Program AstNode =
+{
+	AstNode *stmts; 
+}
+
+%node Statement AstNode %abstract
+
+%node StatementList Statement=
+{
+	NodeVector stmts;
+}
+
+%node AssignmentStmt Statement =
+{
+	AstNode *lhs;
+	AstNode *rhs;
+}
+
+%node Expression AstNode %abstract 
+
+%node VarExpression Expression =
+{
+	StdString var;
+}
+
+%node NumberExpression Expression =
+{
+	int number;
+}
+%node IfStmt Statement =
+{
+	AstNode *condition;
+	AstNode *stmt;
+	AstNode *elseStmt;
+}
+
+%node Condition AstNode %abstract
+
+%node RelationalExpression Condition = 
+{
+	AstNode *var1;
+	RelationalOperator op;
+	AstNode *var2;
+}
+
+%node SimpleCondition Condition =
+{
+	StdString var;
+}
+
+%node PrintStmt Statement = 
+{
+	AstNode *var;
+}
+
+%operation %virtual StdString toCpp(AstNode *this, USet &varSet)
+
+toCpp(Program)
+{
+	std::string output="";
+	std::string statements;
+
+    output += "#include<iostream>\n";
+    output += "#include<fstream>\n";
+    output += "#include<string>\n";
+
+    output += "int main() {\n";
+	
+	statements += stmts->toCpp(varSet);
+	
+
+	for(const auto &var : varSet){
+		output += "int " + var + ";\n";
+	}
+
+	output += statements;
+
+    output += "return 0;\n}";
+	return output;
+}
+
+toCpp(StatementList){
+	
+    std::string statements;
+    for(auto *stmt:stmts)
+	{
+		statements += stmt->toCpp(varSet) + "\n";
+	}
+
+    return statements;
+}
+
+toCpp(AssignmentStmt)
+{
+	varSet.insert(lhs->toCpp(varSet));
+	return lhs->toCpp(varSet) + "=" + rhs->toCpp(varSet) + ";";
+}
+toCpp(IfStmt)
+{
+	if(elseStmt==nullptr)
+		return "if (" + condition->toCpp(varSet) + ")" + stmt->toCpp(varSet) + " ";
+	else
+		return "if (" + condition->toCpp(varSet) + ")" + stmt->toCpp(varSet)+ "else " +elseStmt->toCpp(varSet) + " ";
+}
+
+toCpp(RelationalExpression)
+{
+	return var1->toCpp(varSet) + RelationalToString(op) + var2->toCpp(varSet); 
+
+}
+
+toCpp(SimpleCondition)
+{ 
+	return var; 
+}
+
+toCpp(PrintStmt)
+{
+    std::string output =  "std::cout << " + var->toCpp(varSet) + " << std::endl; ";
+    return output;
+}
+
+toCpp(VarExpression)
+{
+	return var; 
+}
+
+toCpp(NumberExpression)
+{
+	return std::to_string(number); 
+}
